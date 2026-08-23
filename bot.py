@@ -59,16 +59,32 @@ async def generate_fields(idea: str):
     for _ in range(3):
         try:
             async with aiohttp.ClientSession() as s:
-                async with s.get(AI_BASE, params={"q": prompt}, timeout=40) as r:
+                # FIXED: POST + handle result.answer format from your screenshot
+                async with s.post(AI_BASE, json={"q": prompt}, timeout=60) as r:
                     data = await r.json()
-                    txt = data.get("result") or data.get("response") or ""
+                    print(f"AI RAW: {data}")
+
+                    txt = ""
+                    res = data.get("result")
+                    if isinstance(res, dict):
+                        txt = res.get("answer", "") or res.get("response", "")
+                    elif isinstance(res, str):
+                        txt = res
+                    else:
+                        txt = data.get("response") or data.get("answer") or str(data)
+
                     if "TITLE:" in txt and "STYLE:" in txt and "LYRICS:" in txt:
                         title = re.search(r'TITLE:\s*(.+)', txt, re.I).group(1).strip()[:80]
                         style = re.search(r'STYLE:\s*(.+)', txt, re.I).group(1).strip()[:120]
                         lyrics = re.search(r'LYRICS:\s*(.+)', txt, re.I|re.S).group(1).strip()[:3000]
                         return title, style, lyrics
-        except: continue
-    return f"{idea[:30].title()} Vibes", "Pop, emotional, 100 BPM, piano", f"[Verse 1]\n{idea}\n[Chorus]\n{idea}\n[Outro]\nYeah..."
+                    else:
+                        print(f"AI didn't return TITLE/STYLE/LYRICS, got: {txt[:200]}")
+        except Exception as e:
+            print(f"AI error {e}")
+            await asyncio.sleep(1)
+            continue
+    return f"{idea[:30].title()} Vibes", "Afro Amapiano, log drums, emotional, 110 BPM", f"[Verse 1]\n{idea}\n[Chorus]\n{idea}\n[Verse 2]\nHold you close till morning light\n[Outro]\nYeah..."
 
 async def call_suno(title, style, lyrics):
     url = f"{SUNO_API}?action=generate&prompt={urllib.parse.quote(lyrics)}&title={urllib.parse.quote(title)}&isInstrumental=false&musicStyle={urllib.parse.quote(style)}"
@@ -76,9 +92,11 @@ async def call_suno(title, style, lyrics):
         async with s.get(url, timeout=180) as r:
             try:
                 data = await r.json()
+                print(f"SUNO RAW: {data}")
                 if data.get("data",{}).get("tracks"):
                     return data["data"]["tracks"][0]
-            except: pass
+            except Exception as e:
+                print(f"Suno error {e}")
     return None
 
 async def start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
@@ -106,7 +124,6 @@ async def on_message(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     state = ctx.user_data.get('state')
     text = update.message.text.strip()
 
-    # FULL CUSTOM: Title -> Style -> Lyrics one by one
     if state == "await_full_title":
         ctx.user_data['title'] = text[:80]; ctx.user_data['state'] = "await_full_style"
         await update.message.reply_text(f"✅ Title: *{text}*\n\n2️⃣ Now send Style:", parse_mode="Markdown"); return
@@ -117,7 +134,6 @@ async def on_message(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         ctx.user_data['lyrics'] = text[:3000]; ctx.user_data['state'] = None
         await update.message.reply_text(f"*Song Title:*\n{ctx.user_data['title']}\n\n*Style Prompt:*\n{ctx.user_data['style']}\n\n*Full Lyrics:*\n{text[:3500]}", parse_mode="Markdown", reply_markup=continue_kb()); return
 
-    # OWN LYRICS: Lyrics -> Title -> Style
     elif state == "await_own_lyrics":
         ctx.user_data['lyrics'] = text[:3000]; ctx.user_data['state'] = "await_own_title"
         await update.message.reply_text("✅ Lyrics saved!\n\n2️⃣ Now send *Title*:", parse_mode="Markdown"); return
@@ -179,7 +195,6 @@ async def on_button(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
             try:
                 await ctx.bot.send_chat_action(chat_id, ChatAction.UPLOAD_DOCUMENT)
-                # THIS FIXES Unknown artist +.mp3
                 await ctx.bot.send_audio(
                     chat_id,
                     audio=track['musicFile'],
@@ -213,7 +228,7 @@ def main():
     app.add_handler(CallbackQueryHandler(on_verify, pattern="^verify$"))
     app.add_handler(CallbackQueryHandler(on_button, pattern="^(mode_|continue|edit_|regen|cancel)"))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, on_message))
-    print("✅ Suno Bot Fixed Live")
+    print("✅ Suno Bot Fixed Live - POST API")
     app.run_polling(drop_pending_updates=True, close_loop=False)
 
 if __name__ == "__main__":
