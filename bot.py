@@ -240,7 +240,6 @@ async def on_button(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         track = await call_suno(title, style, lyrics)
         if track and (track.get('musicFile') or track.get('audioUrl')):
             audio_url = track.get('musicFile') or track.get('audioUrl')
-            # FIXED AUDIO - ONLY light.mp3 PLAYABLE
             await ctx.bot.send_chat_action(chat_id, ChatAction.UPLOAD_VOICE)
             await ctx.bot.send_audio(
                 chat_id=chat_id,
@@ -266,12 +265,18 @@ async def on_button(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 def main():
     threading.Thread(target=run_flask, daemon=True).start()
     app = Application.builder().token(BOT_TOKEN).build()
+
+    # FIX CONFLICT ERROR
+    async def post_init(application):
+        await application.bot.delete_webhook(drop_pending_updates=True)
+    app.post_init = post_init
+
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CallbackQueryHandler(on_verify, pattern="^verify$"))
     app.add_handler(CallbackQueryHandler(on_button, pattern="^(mode_|continue|edit_|regen|cancel|trending|idea_|surprise|back_)"))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, on_message))
-    print("✅ Bot Live - Audio Light.mp3 Fixed")
-    app.run_polling(drop_pending_updates=True, close_loop=False)
+    print("✅ Bot Live - Conflict Fixed - Audio Light.mp3")
+    app.run_polling(drop_pending_updates=True, close_loop=False, allowed_updates=Update.ALL_TYPES)
 
 if __name__ == "__main__":
     main()
