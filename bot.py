@@ -12,7 +12,7 @@ GROUP_ID = -1004383326043
 GROUP_USERNAME = "@startech372"
 GROUP_LINK = "https://t.me/startech372"
 SUNO_API = "https://api.omegatech.app/api/ai/sonu-pro"
-AI_BASE = "https://api.hostify.indevs.in/api/ai/gemini-v2"
+AI_BASE = "https://api.hostify.indevs.in/api/ai/grok"
 
 flask_app = Flask(__name__)
 @flask_app.route('/')
